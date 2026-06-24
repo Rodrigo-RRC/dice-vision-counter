@@ -22,6 +22,13 @@ Imagem → HSV → Máscara roxa → Contornos → SimpleBlobDetector → Soma
 
 ## Resultado
 
+| Original | Detectado |
+|:--------:|:---------:|
+| ![](data/raw/img2.jpg) | ![](assets/img2_detected.jpg) |
+| ![](data/raw/img1.jpg) | ![](assets/img1_detected.jpg) |
+
+O sistema delimita cada dado com um bounding box verde, marca cada pip com um círculo vermelho e exibe a contagem no canto superior esquerdo.
+
 ```
 === img1.jpg ===  → 3 dados | soma: 11
 === img2.jpg ===  → 1 dado  | soma: 4
