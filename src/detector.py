@@ -127,66 +127,66 @@ def find_dice_contours(mask: np.ndarray) -> list:
 
 def count_pips(image: np.ndarray, contour: np.ndarray) -> int:
     """
-    Conta os pontos (pips) brancos na face visível de um dado.
+    Conta os pontos (pips) brancos na face visivel de um dado.
 
-    Para isso, recortamos a região do dado (ROI), convertemos para
-    escala de cinza e aplicamos o detector de círculos de Hough.
+    Em vez de HoughCircles (que, nestes dados translucidos, detectava
+    reflexos, quinas arredondadas e pontos de outras faces vistos atraves
+    do corpo), isolamos cada pip como uma "mancha" (blob) clara e usamos
+    o cv2.SimpleBlobDetector. Ele filtra as deteccoes por FORMA, mantendo
+    so manchas redondas, cheias e bem proporcionadas -- o que descarta
+    naturalmente a borda brilhante do dado e os reflexos alongados.
 
     Args:
         image: Imagem original em BGR.
         contour: Contorno do dado dentro do qual procurar os pips.
 
     Returns:
-        Número inteiro representando o valor da face do dado (1 a 6).
+        Numero de pips encontrados na face (tipicamente de 1 a 6).
     """
-    # cv2.boundingRect calcula o menor retângulo alinhado aos eixos
-    # que envolve completamente o contorno.
-    # Retorna: x e y do canto superior esquerdo, largura e altura.
+    # Recorta a regiao do dado (ROI) a partir do retangulo do contorno.
     x, y, w, h = cv2.boundingRect(contour)
+    roi = image[y:y + h, x:x + w]
 
-    # Recortamos apenas a região do dado da imagem original.
-    # Isso é chamado de ROI (Region of Interest — Região de Interesse).
-    # A notação NumPy image[y:y+h, x:x+w] significa:
-    # "linhas de y até y+h, colunas de x até x+w"
-    roi = image[y:y+h, x:x+w]
-
-    # Convertemos o ROI para escala de cinza.
-    # HoughCircles trabalha com imagem de canal único.
+    # O detector trabalha em tons de cinza. A suavizacao leve evita que
+    # granulado da textura vire mancha falsa.
     roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    roi_gray = cv2.GaussianBlur(roi_gray, (3, 3), 1)
 
-    # Suavização Gaussiana para reduzir ruído antes da detecção de círculos.
-    # O kernel (5,5) e sigma 2 são parâmetros de suavização.
-    # Sem isso, HoughCircles tende a detectar círculos falsos em bordas ruidosas.
-    roi_blur = cv2.GaussianBlur(roi_gray, (5, 5), 2)
+    # A area do dado serve de referencia: assim os limites de tamanho dos
+    # pips ficam proporcionais ao tamanho do dado na imagem.
+    die_area = w * h
 
-    # cv2.HoughCircles detecta círculos usando a Transformada de Hough.
-    # HOUGH_GRADIENT: método baseado em gradiente de intensidade.
-    # dp=1.2: resolução do acumulador (1.0 = mesma resolução da imagem).
-    # minDist: distância mínima entre centros de círculos detectados.
-    #          Usamos h//4 para evitar detectar o mesmo pip duas vezes.
-    # param1: limiar superior do detector de bordas Canny interno.
-    # param2: limiar de votos no acumulador (menor = detecta mais, mas com mais falsos).
-    # minRadius e maxRadius: tamanho esperado dos pips em pixels.
-    circles = cv2.HoughCircles(
-        roi_blur,
-        cv2.HOUGH_GRADIENT,
-        dp=1.2,
-        minDist=h // 4,
-        param1=50,
-        param2=15,
-        minRadius=5,
-        maxRadius=30,
-    )
+    params = cv2.SimpleBlobDetector_Params()
 
-    # HoughCircles retorna None se não encontrar nenhum círculo.
-    if circles is None:
-        return 0
+    # Cor: procuramos manchas CLARAS (pips brancos), nao escuras.
+    params.filterByColor = True
+    params.blobColor = 255
 
-    # circles tem shape (1, N, 3): N círculos, cada um com (x_centro, y_centro, raio).
-    # np.round arredonda os valores e uint16 converte para inteiro sem sinal.
-    circles = np.round(circles[0]).astype(np.uint16)
+    # Area: descarta ruido minusculo e manchas grandes demais (reflexo amplo).
+    params.filterByArea = True
+    params.minArea = die_area * 0.004
+    params.maxArea = die_area * 0.06
 
-    return len(circles)
+    # Circularidade: 1.0 = circulo perfeito. Descarta formas irregulares.
+    params.filterByCircularity = True
+    params.minCircularity = 0.6
+
+    # Inercia: o quanto a mancha e redonda x alongada. Baixo = alongada
+    # (tipico da borda/reflexo) -> descartada.
+    params.filterByInertia = True
+    params.minInertiaRatio = 0.4
+
+    # Convexidade: descarta manchas com reentrancias (uniao de borda + pip).
+    params.filterByConvexity = True
+    params.minConvexity = 0.7
+
+    detector = cv2.SimpleBlobDetector_create(params)
+
+    # detect() devolve um keypoint por mancha aceita; o total de pips
+    # e simplesmente a quantidade de keypoints.
+    keypoints = detector.detect(roi_gray)
+
+    return len(keypoints)
 
 
 def detect_dice(image_path: str) -> int:
