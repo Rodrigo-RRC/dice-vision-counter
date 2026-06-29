@@ -9,13 +9,13 @@ Sistema de visão computacional que detecta dados em imagens e soma automaticame
 O pipeline percorre cinco etapas para cada imagem:
 
 ```
-Imagem → HSV → Máscara roxa → Contornos → SimpleBlobDetector → Soma
+Imagem → HSV → Máscara roxa → Contornos → Top-hat + Saturação → Soma
 ```
 
-1. **Segmentação por cor** — converte a imagem para o espaço HSV e isola apenas os pixels roxos dos dados
-2. **Detecção de contornos** — encontra as regiões dos dados na máscara binária
+1. **Segmentação por cor** — converte a imagem para HSV e isola os pixels roxos dos dados
+2. **Detecção de contornos** — encontra as regiões de cada dado na máscara binária
 3. **Recorte (ROI)** — extrai a região de cada dado individualmente
-4. **Contagem de pips** — aplica `SimpleBlobDetector` filtrando por circularidade, inércia e convexidade para contar apenas os pontos brancos reais
+4. **Contagem de pips** — aplica white top-hat morfológico para realçar os pontos brancos e filtra por saturação HSV para descartar "fantasmas" das faces laterais (vistos através do plástico translúcido). Limiar de Otsu faz o corte de forma automática
 5. **Soma** — acumula o valor de todos os dados na imagem
 
 ---
@@ -32,8 +32,8 @@ O sistema delimita cada dado com um bounding box verde, marca cada pip com um c�
 ```
 === img1.jpg ===  → 3 dados | soma: 11
 === img2.jpg ===  → 1 dado  | soma: 4
-=== img3.jpg ===  → 4 dados | soma: 14
-=== img4.jpg ===  → 4 dados | soma: 8
+=== img3.jpg ===  → 4 dados | soma: 14  ⚠️ erro: dado rotacionado 45° teve pip subestimado
+=== img4.jpg ===  → 4 dados | soma: 7
 ```
 
 ---
@@ -50,11 +50,13 @@ O sistema delimita cada dado com um bounding box verde, marca cada pip com um c�
 
 ```
 dice-vision-counter/
+├── assets/               # imagens com detecção anotada
 ├── data/
-│   └── raw/          # imagens de entrada
+│   └── raw/              # imagens de entrada
 ├── src/
-│   ├── detector.py   # pipeline de detecção
-│   └── main.py       # entrada: varre o diretório e gera relatório
+│   ├── detector.py       # pipeline de detecção
+│   ├── main.py           # entrada: varre o diretório e gera relatório
+│   └── visualize.py      # gera as imagens anotadas em assets/
 └── requirements.txt
 ```
 
@@ -66,17 +68,27 @@ dice-vision-counter/
 # clone o repositório
 git clone https://github.com/Rodrigo-RRC/dice-vision-counter.git
 cd dice-vision-counter
+```
 
-# crie e ative o ambiente virtual
+**Windows:**
+```bash
 python -m venv .venv
-.venv\Scripts\activate      # Windows
-# source .venv/bin/activate  # Linux/macOS
-
-# instale as dependências
+.venv\Scripts\activate
 pip install -r requirements.txt
-
-# execute
 python src/main.py
+```
+
+**Linux/macOS:**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python src/main.py
+```
+
+Para gerar as imagens com anotações visuais:
+```bash
+python src/visualize.py
 ```
 
 ---
@@ -84,8 +96,8 @@ python src/main.py
 ## Limitações conhecidas
 
 - Otimizado para dados roxos translúcidos sobre fundo neutro
-- Iluminação muito intensa pode saturar um pip e dificultar a detecção
-- Dados muito inclinados (>45°) podem ter o bounding rect distorcido
+- Dados muito inclinados (>45°) podem ter o bounding rect distorcido e pips subestimados
+- Iluminação muito intensa pode saturar um pip e alterar sua forma detectada
 
 ---
 
@@ -98,5 +110,5 @@ python src/main.py
 ## Próximos passos
 
 - [ ] Suporte a dados de outras cores
-- [ ] Detecção robusta a variações de iluminação
-- [ ] Interface visual com anotações sobre a imagem original
+- [ ] Detecção robusta a variações de iluminação e ângulo
+- [ ] Interface web interativa (Streamlit)
